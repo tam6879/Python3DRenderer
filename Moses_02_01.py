@@ -2,7 +2,7 @@
 # 1001_123_456
 # 2024_10_14
 # Assignment_02_01
-
+import copy as copy
 import numpy as np
 import tkinter as tk
 import time
@@ -158,8 +158,8 @@ class cl_world:
         ##################### New Stuff ########################
         self.vertex_count = 0
         self.face_count = 0
-        self.vertices = [None]
-        self.initial_vertices = [None]
+        self.vertices = np.array([None])
+        self.initial_vertices = np.array([None])
         self.faces = []
         self.lines = []
         self.vmin = [0,0]
@@ -326,12 +326,43 @@ class cl_world:
         y_increment = 0 if not y_inc_len else y_scale / y_inc_len
         # get the point that should be the origin
         origin = [self.left_bound - self.min[X] * x_increment, self.upper_bound + self.min[Y] * y_increment]
-        self.max_view_bounds = [self.right_bound, self.lower_bound, self.max[N] ]
-        self.min_view_bounds = [self.left_bound, self.upper_bound, self.min[N] ]
         #print("origin: ", origin, "\nx_scale: ", x_scale, "\ny_scale: ", y_scale, "\nx_inc_leng: ", x_inc_leng, "\ny_inc_len: ", y_inc_len, "\nx_increment: ", x_increment, "\ny_increment: ", y_increment)
         # draw a rectangle to represent the viewport
         self.canvas.coords(self.objects[0], int(self.left_bound), int(self.upper_bound), int(self.right_bound), int(self.lower_bound))
-     
+        
+        print("projected_vertices: ", self.vertices)
+        print("initial_vertices before projection: ", self.initial_vertices)
+        self.vertices = copy.deepcopy(self.initial_vertices)
+        for i in range(1, len(self.vertices)):
+            t_vert = self.vertices[i]
+            print("initial vert: ", i, " = ", t_vert)
+            # step 1 translate
+            t_vert += self.vrp_trans
+            
+            # print("translate vert: ", i, " = ", t_vert)
+            # step 2 rotate x
+            t_vert = [t_vert[X], np.cos(self.theta_x) * t_vert[Y] - np.sin(self.theta_x) * t_vert[Z], np.sin(self.theta_x) * t_vert[Y] + np.cos(self.theta_x) * t_vert[Z]]
+            # print("rotate x vert: ", i, " = ", t_vert)
+            # step 3 rotate y
+            t_vert = [np.cos(self.theta_y) * t_vert [X] - np.sin(self.theta_y) * t_vert [Z], t_vert[Y], np.sin(self.theta_y) * t_vert [X] + np.cos(self.theta_y) * t_vert[Z]]
+            # print("rotate y vert: ", i, " = ", t_vert)
+            # step 4 rotate z
+            t_vert = [np.cos(self.theta_z) * t_vert [X] - np.sin(self.theta_z) * t_vert [Y], np.cos(self.theta_z) * t_vert [Y] + np.sin(self.theta_z) * t_vert [X], t_vert[Z]]
+            # print("rotate z vert: ", i, " = ", t_vert)
+            # step 5 shear
+            t_vert = [(t_vert[X] + self.shx * t_vert[Z]), (t_vert[Y] + self.shy * t_vert[Z]), t_vert[Z]]
+            # print("shear vert: ", i, " = ", t_vert)
+            # step 6 translate
+            t_vert += self.view_trans
+            # print("translate vert: ", i, " = ", t_vert)
+            # step 7 scale
+            t_vert *= self.view_scale
+            # print("(final) scale vert: ", i, " = ", t_vert)
+            # apply the transformations
+            self.vertices[i] = t_vert
+        print("initial verticies after projection: ", self.initial_vertices)
+        print(" same as regular? : ", self.initial_vertices[1] == self.vertices[1])
+
         # draw each face
         n = len(self.objects)
         for i in range(1, n):
@@ -488,12 +519,15 @@ class cl_world:
         # print("After Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
         # origin = [self.vrp[X] * x_increment + left_bound, self.vrp[Y] * y_increment + upper_bound]
         # keep the original vertices
+        print("self.vertices cunt: ", self.vertices)
+        self.initial_vertices = copy.deepcopy(self.vertices)
         # now do all that to every vert
         for i in range(1, len(self.vertices)):
             t_vert = self.vertices[i]
             print("initial vert: ", i, " = ", t_vert)
             # step 1 translate
             t_vert += self.vrp_trans
+            print("HOE vertices: ", self.vertices[i], " initial_vertices: ", self.initial_vertices[i])
             # print("translate vert: ", i, " = ", t_vert)
             # step 2 rotate x
             t_vert = [t_vert[X], np.cos(self.theta_x) * t_vert[Y] - np.sin(self.theta_x) * t_vert[Z], np.sin(self.theta_x) * t_vert[Y] + np.cos(self.theta_x) * t_vert[Z]]
@@ -515,6 +549,7 @@ class cl_world:
             # print("(final) scale vert: ", i, " = ", t_vert)
             # apply the transformations
             self.vertices[i] = t_vert
+            print("vertices: ", self.vertices[i], " initial_vertices: ", self.initial_vertices[i])
         
         # draw each face
         for t_face in self.faces:
@@ -807,10 +842,10 @@ class cl_world:
             print("INVALID PARAMETERS")
             return
         # get vertex count
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
-        original_verts = self.vertices.copy()
+        original_verts = self.initial_vertices.copy()
         print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
         print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
@@ -823,7 +858,7 @@ class cl_world:
                 t_vert = original_verts[j].copy()
                 # rx = [x, cosy - sinz, siny + cosz]
                 t_vert = [t_vert[X], (round(np.cos(theta), 8) * t_vert[Y]) - round((np.sin(theta) * t_vert[Z]), 8), (round(np.sin(theta), 8) * t_vert[Y]) + round((np.cos(theta) * t_vert[Z]), 8)]
-                self.vertices[j] = t_vert
+                self.initial_vertices[j] = t_vert
             # redraw objects after updating all verts and force an update
             self.re_draw_objects()
             self.root.update()
@@ -841,10 +876,10 @@ class cl_world:
             print("INVALID PARAMETERS")
             return
         # get vertex count
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
-        original_verts = self.vertices.copy()
+        original_verts = self.initial_vertices.copy()
         print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
         print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
@@ -857,7 +892,7 @@ class cl_world:
                 t_vert = original_verts[j].copy()
                 # ry = [cosx - sinz, y, sinx + cosz]
                 t_vert = [(round(np.cos(theta), 8) * t_vert[X]) - round((np.sin(theta) * t_vert[Z]), 8), t_vert[Y], (round(np.sin(theta), 8) * t_vert[X]) + round((np.cos(theta) * t_vert[Z]), 8)]
-                self.vertices[j] = t_vert
+                self.initial_vertices[j] = t_vert
             # redraw objects after updating all verts and force an update
             self.re_draw_objects()
             self.root.update()
@@ -875,10 +910,10 @@ class cl_world:
             print("INVALID PARAMETERS")
             return
         # get vertex count
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
-        original_verts = self.vertices.copy()
+        original_verts = self.initial_vertices.copy()
         print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
         print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
@@ -892,7 +927,7 @@ class cl_world:
                 # rz = [cosx - siny, sinx + cosx, z]
                 t_vert = [(round(np.cos(theta), 8) * t_vert[X]) - round((np.sin(theta) * t_vert[Y]), 8), (round(np.sin(theta), 8) * t_vert[X]) + round((np.cos(theta) * t_vert[Y]), 8), t_vert[Z]]
                 # print("vert ", j, " after rotate: ", t_vert)
-                self.vertices[j] = t_vert
+                self.initial_vertices[j] = t_vert
             # redraw objects after updating all verts and force an update
             self.re_draw_objects()
             self.root.update()
@@ -934,13 +969,12 @@ class cl_world:
         print("b after y rot: ", point_b)
 
         # get vertex count
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         deg_step = deg / (steps)
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
-        original_verts = self.vertices.copy()
+        original_verts = self.initial_vertices.copy()
         print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
         print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
-        degrees_rotated = 0
         # for each step
         for i in range(1, steps + 1):
             # get the step theta
@@ -962,7 +996,7 @@ class cl_world:
                 t_vert = [t_vert[X], np.cos(-theta_x) * t_vert[Y] - np.sin(-theta_x) * t_vert[Z], np.sin(-theta_x) * t_vert[Y] + np.cos(-theta_x) * t_vert[Z]]
                 # unapply the a to origin translation
                 t_vert -= a_to_origin
-                self.vertices[j] = t_vert
+                self.initial_vertices[j] = t_vert
             # redraw objects after updating all verts and force an update
             self.re_draw_objects()
             self.root.update()
@@ -1000,7 +1034,7 @@ class cl_world:
         x_prev_step = y_prev_step = z_prev_step = 1.0
         t_point = [0.0 - scale_point[X], 0.0 - scale_point[Y], 0.0 - scale_point[Z]]
         # get vertex count
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         # for each step (starting at 1 and ending with i = steps on the last one)
         for i in range(1, steps + 1):
             # This gets the "scale it should be" at this step, ternary to avoid divide by 0
@@ -1013,7 +1047,7 @@ class cl_world:
             z_step = t_z_scale / z_prev_step
             # for each vertex (except the first one, which is None)
             for j in range(1, v_count):
-                t_vert = self.vertices[j]
+                t_vert = self.initial_vertices[j]
                 # apply point transformation to vertice
                 t_vert[X] += t_point[X]
                 t_vert[Y] += t_point[Y]
@@ -1049,16 +1083,17 @@ class cl_world:
         t_step = 1.0 / steps
         trans_array *= t_step
         # get the number of vertices
-        v_count = len(self.vertices)
+        v_count = len(self.initial_vertices)
         # for each step
         for i in range(steps):
             # for each vertex (except the first one, which is None)
             for j in range(1, v_count):
                 # increment each vertex by the step ammount
-                t_vert = self.vertices[j]
+                t_vert = self.initial_vertices[j]
                 t_vert[X] += trans_array[X]
                 t_vert[Y] += trans_array[Y]
                 t_vert[Z] += trans_array[Z]
+
             # redraw objects after updating all verts and force an update
             self.re_draw_objects()
             self.root.update()

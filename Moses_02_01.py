@@ -16,9 +16,6 @@ Z = N = 2
 PARALLEL = 0
 PERSPECTIVE = 1
 
-FINE = 0
-CLIPPED = 1
-CULLED = 2
 
 class cl_world:
     def __init__(self):
@@ -136,13 +133,13 @@ class cl_world:
         self.target_vrp_label.pack(side=tk.LEFT)
         self.target_vrp_field = tk.Entry(self.cam_frame, width=10)
         self.target_vrp_field.pack(side=tk.LEFT)
-        self.target_vrp_field.insert(tk.END, "[1.0,1.0,1.0]")
+        self.target_vrp_field.insert(tk.END, "[1.0,1.0,0.0]")
         self.cam_steps_label = tk.Label(self.cam_frame, text="Steps:")
         self.cam_steps_label.pack(side=tk.LEFT)
         self.cam_steps_field = tk.Entry(self.cam_frame, width=5)
         self.cam_steps_field.pack(side=tk.LEFT)
         self.cam_steps_field.insert(tk.END, "10")
-        self.cam_button = tk.Button(self.cam_frame, text="Fly Camera", command=self.translation, fg="blue")
+        self.cam_button = tk.Button(self.cam_frame, text="Fly Camera", command=self.fly_camera, fg="blue")
         self.cam_button.pack(side=tk.LEFT)
 
         ################### Canvas #############################
@@ -162,6 +159,7 @@ class cl_world:
         self.vertex_count = 0
         self.face_count = 0
         self.vertices = [None]
+        self.initial_vertices = [None]
         self.faces = []
         self.lines = []
         self.vmin = [0,0]
@@ -178,6 +176,7 @@ class cl_world:
         self.fill_color = 'cyan'
         # view reference point
         self.vrp = [0.0, 0.0, 0.0]
+        self.current_vrp = [0.0, 0.0, 0.0]
         # view point normal
         self.vpn = [0.0, 0.0, 1.0]
         # view point up
@@ -297,6 +296,14 @@ class cl_world:
                 self.vmax = [float(t_split[3]), float(t_split[4])]
             else:
                 return
+    vrp_trans = [0, 0, 0]
+    theta_x = 0
+    theta_y = 0
+    theta_z = 0
+    shx = 0
+    shy = 0
+    view_trans = [0, 0, 0]
+    view_scale = [0, 0, 0]
 
     def re_draw_objects(self,event=None):
         # get window size if we somehow don't have it
@@ -324,10 +331,12 @@ class cl_world:
         #print("origin: ", origin, "\nx_scale: ", x_scale, "\ny_scale: ", y_scale, "\nx_inc_leng: ", x_inc_leng, "\ny_inc_len: ", y_inc_len, "\nx_increment: ", x_increment, "\ny_increment: ", y_increment)
         # draw a rectangle to represent the viewport
         self.canvas.coords(self.objects[0], int(self.left_bound), int(self.upper_bound), int(self.right_bound), int(self.lower_bound))
+     
         # draw each face
         n = len(self.objects)
         for i in range(1, n):
             # get points
+            # print("i = ", i)
             t_line = self.lines[(i - 1)]
             # get clip results
             clip_res = self.clip_line(t_line)
@@ -335,7 +344,7 @@ class cl_world:
             clipped_line = clip_res[1]
             # clipped_line = [self.vertices[clip_res[0]], self.vertices[clip_res[1]]]
             # print("t_line: ", t_line)
-            self.canvas.coords(self.objects[i], clipped_line[0][X] * x_increment + origin[X], clipped_line[0][Y] * y_increment + origin[Y], clipped_line[1][X] * x_increment + origin[X], clipped_line[1][Y] * y_increment + origin[Y])
+            self.canvas.coords(self.objects[i], clipped_line[0][X] * x_increment + origin[X], clipped_line[0][Y] * -y_increment + origin[Y], clipped_line[1][X] * x_increment + origin[X], clipped_line[1][Y] * -y_increment + origin[Y])
             # print("redrawing line: A: ", self.vertices[t_line[0]][X] * x_increment + origin[X], " ", self.vertices[t_line[0]][Y] * y_increment + origin[Y], " -> B: ", self.vertices[t_line[1]][X] * x_increment + origin[X], " ", self.vertices[t_line[1]][Y] * y_increment + origin[Y])
             # if the item is culled set its mode to be hidden
             if clip_res[0]: self.canvas.itemconfigure(self.objects[i], state = "normal")
@@ -345,17 +354,20 @@ class cl_world:
             # this is for the teapot lid specifically, because it has 4 verts in each face
             # elif v_n == 4: self.canvas.coords(self.objects[i], t_verts[0][X], t_verts[0][Y], t_verts[1][X], t_verts[1][Y], t_verts[2][X], t_verts[2][Y], t_verts[3][X], t_verts[3][Y])
     
-    def draw_objects(self,event=None):
+    def draw_objects(self,event=None, flying = False):
         # if no object or camera has been loaded return
         if not (self.file_loaded and self.cam_loaded): 
+            print("NO CAM OR OBJECT LOADED")
             return
         # if we have already cached objects, call redraw instead
-        if self.objects:
+        if self.objects and not flying:
             self.re_draw_objects()
+            print("REDRAWING")
             return
         self.object_drawn = True
         # clear the canvas
         self.canvas.delete("all")
+        self.objects.clear()
         # get window size if we somehow don't have it
         if self.width == 0: self.width = float(self.canvas.cget("width"))
         if self.height == 0: self.height = float(self.canvas.cget("height")) 
@@ -369,92 +381,96 @@ class cl_world:
         # draw a rectangle to represent the viewport
         self.objects.append(self.canvas.create_rectangle(int(self.left_bound), int(self.upper_bound), int(self.right_bound), int(self.lower_bound)))
         # print("origin: ", origin, " x_increment: ", x_increment, " y_increment: ", y_increment)
-        print("Before Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
+        # print("Before Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
 
-        print("STEP 1: translate VRP to origin")
-        print("vrp before trans: ", self.vrp)
-        vrp_trans = self.vrp * -1
-        self.vrp += vrp_trans
-        print("vrp after trans: ", self.vrp)
+        # print("STEP 1: translate VRP to origin")
+        # print("vrp before trans: ", self.vrp)
+        self.vrp_trans = self.vrp * -1
+        self.vrp += self.vrp_trans
+        # print("vrp after trans: ", self.vrp)
 
-        print("STEP 2: rotate vpn on the x axis to be 0 on y axis") 
-        print("vpn before rx: ", self.vpn)
-        print("vup before rx: ", self.vup)
-        theta_x = np.arctan(self.vpn[Y] / self.vpn[Z])
-        self.vpn = [self.vpn[X], np.cos(theta_x) * self.vpn[Y] - np.sin(theta_x) * self.vpn[Z], np.sin(theta_x) * self.vpn[Y] + np.cos(theta_x) * self.vpn[Z]]
-        self.vup = [self.vup[X], np.cos(theta_x) * self.vup[Y] - np.sin(theta_x) * self.vup[Z], np.sin(theta_x) * self.vup[Y] + np.cos(theta_x) * self.vup[Z]]
+        # print("STEP 2: rotate vpn on the x axis to be 0 on y axis") 
+        # print("vpn before rx: ", self.vpn)
+        # print("vup before rx: ", self.vup)
+        self.theta_x = np.arctan(self.vpn[Y] / self.vpn[Z])
+        self.vpn = [self.vpn[X], np.cos(self.theta_x) * self.vpn[Y] - np.sin(self.theta_x) * self.vpn[Z], np.sin(self.theta_x) * self.vpn[Y] + np.cos(self.theta_x) * self.vpn[Z]]
+        self.vup = [self.vup[X], np.cos(self.theta_x) * self.vup[Y] - np.sin(self.theta_x) * self.vup[Z], np.sin(self.theta_x) * self.vup[Y] + np.cos(self.theta_x) * self.vup[Z]]
         if self.vpn[Z] < 0.0:
-            print("rotate another 180")
+            # print("rotate another 180")
             rad180 = np.deg2rad(180.0)
-            theta_x += rad180
+            self.theta_x += rad180
             self.vpn = [self.vpn[X], np.cos(rad180) * self.vpn[Y] - np.sin(rad180) * self.vpn[Z], np.sin(rad180) * self.vpn[Y] + np.cos(rad180) * self.vpn[Z]]
             self.vup = [self.vup[X], np.cos(rad180) * self.vup[Y] - np.sin(rad180) * self.vup[Z], np.sin(rad180) * self.vup[Y] + np.cos(rad180) * self.vup[Z]]
-        print("vpn after rx: ", self.vpn)
-        print("vup after rx: ", self.vup)
+        # print("vpn after rx: ", self.vpn)
+        # print("vup after rx: ", self.vup)
 
-        print("STEP 3: rotate vpn on the y axis to be 0 on x axis") 
-        print("vpn before ry: ", self.vpn)
-        print("vup before ry: ", self.vup)
-        theta_y = np.arctan(self.vpn [X] / self.vpn [Z])
-        self.vpn  = [np.cos(theta_y) * self.vpn [X] - np.sin(theta_y) * self.vpn [Z], self.vpn[Y], np.sin(theta_y) * self.vpn [X] + np.cos(theta_y) * self.vpn[Z]]
-        self.vup  = [np.cos(theta_y) * self.vup [X] - np.sin(theta_y) * self.vup [Z], self.vup[Y], np.sin(theta_y) * self.vup [X] + np.cos(theta_y) * self.vup[Z]]
+        # print("STEP 3: rotate vpn on the y axis to be 0 on x axis") 
+        # print("vpn before ry: ", self.vpn)
+        # print("vup before ry: ", self.vup)
+        self.theta_y = np.arctan(self.vpn [X] / self.vpn [Z])
+        self.vpn  = [np.cos(self.theta_y) * self.vpn [X] - np.sin(self.theta_y) * self.vpn [Z], self.vpn[Y], np.sin(self.theta_y) * self.vpn [X] + np.cos(self.theta_y) * self.vpn[Z]]
+        self.vup  = [np.cos(self.theta_y) * self.vup [X] - np.sin(self.theta_y) * self.vup [Z], self.vup[Y], np.sin(self.theta_y) * self.vup [X] + np.cos(self.theta_y) * self.vup[Z]]
         # if vpn is negative, rotate it another 180 degrees
         if self.vpn[Z] < 0.0:
             rad180 = np.deg2rad(180.0)
-            theta_y += rad180
+            self.theta_y += rad180
             self.vpn  = [np.cos(rad180) * self.vpn [X] - np.sin(rad180) * self.vpn [Z], self.vpn[Y], np.sin(rad180) * self.vpn [X] + np.cos(rad180) * self.vpn[Z]]
             self.vup  = [np.cos(rad180) * self.vup [X] - np.sin(rad180) * self.vup [Z], self.vup[Y], np.sin(rad180) * self.vup [X] + np.cos(rad180) * self.vup[Z]]
-        print("vpn after ry: ", self.vpn)
-        print("vup after ry: ", self.vup)
+        # print("vpn after ry: ", self.vpn)
+        # print("vup after ry: ", self.vup)
 
-        print("STEP 4: rotate vup on the z axis to be 0 on x axis") 
-        print("vpn before rz: ", self.vpn)
-        print("vup before rz: ", self.vup)
-        theta_z = np.arctan(self.vup [X] / self.vup [Y])
-        self.vpn  = [np.cos(theta_z) * self.vpn [X] - np.sin(theta_z) * self.vpn [Y], np.cos(theta_z) * self.vpn [Y] + np.sin(theta_z) * self.vpn [X], self.vpn[Z]]
-        self.vup  = [np.cos(theta_z) * self.vup [X] - np.sin(theta_z) * self.vup [Y], np.cos(theta_z) * self.vup [Y] + np.sin(theta_z) * self.vup [X], self.vup[Z]]
+        # print("STEP 4: rotate vup on the z axis to be 0 on x axis") 
+        # print("vpn before rz: ", self.vpn)
+        # print("vup before rz: ", self.vup)
+        self.theta_z = np.arctan(self.vup [X] / self.vup [Y])
+        self.vpn  = [np.cos(self.theta_z) * self.vpn [X] - np.sin(self.theta_z) * self.vpn [Y], np.cos(self.theta_z) * self.vpn [Y] + np.sin(self.theta_z) * self.vpn [X], self.vpn[Z]]
+        self.vup  = [np.cos(self.theta_z) * self.vup [X] - np.sin(self.theta_z) * self.vup [Y], np.cos(self.theta_z) * self.vup [Y] + np.sin(self.theta_z) * self.vup [X], self.vup[Z]]
         if self.vup[Y] < 0.0:
-            print("rotate another 180")
+            # print("rotate another 180")
             rad180 = np.deg2rad(180.0)
-            theta_z += rad180
+            self.theta_z += rad180
             self.vpn  = [np.cos(rad180) * self.vpn [X] - np.sin(rad180) * self.vpn [Y], np.cos(rad180) * self.vpn [Y] + np.sin(rad180) * self.vpn [X], self.vpn[Z]]
             self.vup  = [np.cos(rad180) * self.vup [X] - np.sin(rad180) * self.vup [Y], np.cos(rad180) * self.vup [Y] + np.sin(rad180) * self.vup [X], self.vup[Z]]
-        print("vpn after rz: ", self.vpn)
-        print("vup after rz: ", self.vup)
+        # print("vpn after rz: ", self.vpn)
+        # print("vup after rz: ", self.vup)
         
-        print("STEP 5: Shear dop to be parallel to z axis ( x and y = 0 )")
-        shx = -(self.prp[X] - (self.min[U] + self.max[U]) / 2.0) / self.prp[Z]
-        print("PRP before Shx: ", self.prp)
-        self.prp[X] = (self.prp[X] + shx * self.prp[Z])
-        print("PRP after Shx: ", self.prp)
-        shy = -(self.prp[Y] - (self.min[V] + self.max[V]) / 2.0) / self.prp[Z]
-        print("PRP before Shy: ", self.prp)
-        self.prp[Y] = (self.prp[Y] + shy * self.prp[Z])
-        print("PRP after Shy: ", self.prp)
+        # print("STEP 5: Shear dop to be parallel to z axis ( x and y = 0 )")
+        self.shx = -(self.prp[X] - (self.min[U] + self.max[U]) / 2.0) / self.prp[Z]
+        # print("PRP before Shx: ", self.prp)
+        self.prp[X] = (self.prp[X] + self.shx * self.prp[Z])
+        # self.min[X] = (self.min[X] + shx * self.min[Z])
+        # self.max[X] = (self.max[X] + shx * self.max[Z])
+        # print("PRP after Shx: ", self.prp)
+        self.shy = -(self.prp[Y] - (self.min[V] + self.max[V]) / 2.0) / self.prp[Z]
+        # print("PRP before Shy: ", self.prp)
+        self.prp[Y] = (self.prp[Y] + self.shy * self.prp[Z])
+        # self.min[Y] = (self.min[Y] + shy * self.min[Z])
+        # self.max[Y] = (self.max[Y] + shy * self.max[Z])
+        # print("PRP after Shy: ", self.prp)
     
-        print("STEP 6: Translate the lower left corner to origin")
-        view_trans = np.array([-(self.min[U] + self.max[U]) / 2.0, -(self.min[V] + self.max[V]) / 2.0, -self.min[N]])
-        print("Translation: ", view_trans)
-        print("VRP before translate: ", self.vrp)
-        print("PRP before translate: ", self.prp)
-        self.min += view_trans
-        self.max += view_trans
-        self.vrp += view_trans 
-        self.prp += view_trans
-        print("VRP after translate: ", self.vrp)
-        print("PRP after translate: ", self.prp)
+        # print("STEP 6: Translate the lower left corner to origin")
+        self.view_trans = np.array([-(self.min[U] + self.max[U]) / 2.0, -(self.min[V] + self.max[V]) / 2.0, -self.min[N]])
+        # print("Translation: ", view_trans)
+        # print("VRP before translate: ", self.vrp)
+        # print("PRP before translate: ", self.prp)
+        self.min += self.view_trans
+        self.max += self.view_trans
+        self.vrp += self.view_trans 
+        self.prp += self.view_trans
+        # print("VRP after translate: ", self.vrp)
+        # print("PRP after translate: ", self.prp)
 
-        print("STEP 7: Scale the view to be tha canonical view")
-        view_scale = np.array([2.0 / (self.max[U] - self.min[U]), 2.0 / (self.max[V] - self.min[V]), 1.0 / (self.max[N] - self.min[N])])
-        print("view_scale = ", view_scale)
-        print("VRP before scale: ", self.vrp)
-        print("PRP before scale: ", self.prp)
-        self.min *= view_scale
-        self.max *= view_scale
-        self.vrp *= view_scale
-        self.prp *= view_scale
-        print("VRP after scale: ", self.vrp)
-        print("PRP after scale: ", self.prp)
+        # print("STEP 7: Scale the view to be tha canonical view")
+        self.view_scale = np.array([2.0 / (self.max[U] - self.min[U]), 2.0 / (self.max[V] - self.min[V]), 1.0 / (self.max[N] - self.min[N])])
+        # print("view_scale = ", view_scale)
+        # print("VRP before scale: ", self.vrp)
+        # print("PRP before scale: ", self.prp)
+        self.min *= self.view_scale
+        self.max *= self.view_scale
+        self.vrp *= self.view_scale
+        self.prp *= self.view_scale
+        # print("VRP after scale: ", self.vrp)
+        # print("PRP after scale: ", self.prp)
 
         # get the width of the box
         x_scale = (self.right_bound - self.left_bound)
@@ -469,33 +485,34 @@ class cl_world:
         # get the point that should be the origin
         origin = [self.left_bound - self.min[X] * x_increment, self.upper_bound + self.min[Y] * y_increment]
 
-        print("After Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
+        # print("After Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
         # origin = [self.vrp[X] * x_increment + left_bound, self.vrp[Y] * y_increment + upper_bound]
-        # now do all that bullshit ^ to every vert
+        # keep the original vertices
+        # now do all that to every vert
         for i in range(1, len(self.vertices)):
             t_vert = self.vertices[i]
             print("initial vert: ", i, " = ", t_vert)
             # step 1 translate
-            t_vert += vrp_trans
-            print("translate vert: ", i, " = ", t_vert)
+            t_vert += self.vrp_trans
+            # print("translate vert: ", i, " = ", t_vert)
             # step 2 rotate x
-            t_vert = [t_vert[X], np.cos(theta_x) * t_vert[Y] - np.sin(theta_x) * t_vert[Z], np.sin(theta_x) * t_vert[Y] + np.cos(theta_x) * t_vert[Z]]
-            print("rotate x vert: ", i, " = ", t_vert)
+            t_vert = [t_vert[X], np.cos(self.theta_x) * t_vert[Y] - np.sin(self.theta_x) * t_vert[Z], np.sin(self.theta_x) * t_vert[Y] + np.cos(self.theta_x) * t_vert[Z]]
+            # print("rotate x vert: ", i, " = ", t_vert)
             # step 3 rotate y
-            t_vert = [np.cos(theta_y) * t_vert [X] - np.sin(theta_y) * t_vert [Z], t_vert[Y], np.sin(theta_y) * t_vert [X] + np.cos(theta_y) * t_vert[Z]]
-            print("rotate y vert: ", i, " = ", t_vert)
+            t_vert = [np.cos(self.theta_y) * t_vert [X] - np.sin(self.theta_y) * t_vert [Z], t_vert[Y], np.sin(self.theta_y) * t_vert [X] + np.cos(self.theta_y) * t_vert[Z]]
+            # print("rotate y vert: ", i, " = ", t_vert)
             # step 4 rotate z
-            t_vert = [np.cos(theta_z) * t_vert [X] - np.sin(theta_z) * t_vert [Y], np.cos(theta_z) * t_vert [Y] + np.sin(theta_z) * t_vert [X], t_vert[Z]]
-            print("rotate z vert: ", i, " = ", t_vert)
+            t_vert = [np.cos(self.theta_z) * t_vert [X] - np.sin(self.theta_z) * t_vert [Y], np.cos(self.theta_z) * t_vert [Y] + np.sin(self.theta_z) * t_vert [X], t_vert[Z]]
+            # print("rotate z vert: ", i, " = ", t_vert)
             # step 5 shear
-            t_vert = [(t_vert[X] + shx * t_vert[Z]), (t_vert[Y] + shy * t_vert[Z]), t_vert[Z]]
-            print("shear vert: ", i, " = ", t_vert)
+            t_vert = [(t_vert[X] + self.shx * t_vert[Z]), (t_vert[Y] + self.shy * t_vert[Z]), t_vert[Z]]
+            # print("shear vert: ", i, " = ", t_vert)
             # step 6 translate
-            t_vert += view_trans
-            print("translate vert: ", i, " = ", t_vert)
+            t_vert += self.view_trans
+            # print("translate vert: ", i, " = ", t_vert)
             # step 7 scale
-            t_vert *= view_scale
-            print("(final) scale vert: ", i, " = ", t_vert)
+            t_vert *= self.view_scale
+            # print("(final) scale vert: ", i, " = ", t_vert)
             # apply the transformations
             self.vertices[i] = t_vert
         
@@ -517,7 +534,7 @@ class cl_world:
                 j = i + 1 if i + 1 < v_n else 0
                 self.lines.append(np.array([t_face[i], t_face[j]]))
                 self.objects.append(self.canvas.create_line(verts[i][X], verts[i][Y], verts[j][X], verts[j][Y], fill = "cyan"))
-                print("creating line: A: ", verts[i], " -> B: ", verts[j])
+                # print("creating line: A: ", verts[i], " -> B: ", verts[j])
 
 
             # if v_n == 3: self.objects.append(self.canvas.create_polygon(verts[0][X], verts[0][Y], verts[1][X], verts[1][Y], verts[2][X], verts[2][Y], fill = '', outline = self.outline_color))
@@ -526,9 +543,46 @@ class cl_world:
         self.re_draw_objects()
         self.message_label.config(text="Object is drawn :)")
 
-        print("CLIPPING TEST 1")
+        # print("CLIPPING TEST 1")
         # print(self.get_intersect(np.array([-1.0,    -1.055]), np.array([-1.0,    -1.055]), np.array([-1.0, -1.0]), np.array([-1.0, 1.0])))
     
+    def fly_camera(self):
+          # if there is no object drawn, return
+        if not self.object_drawn: return
+        try:
+            # try to get steps and the translation 
+            steps = int(self.cam_steps_field.get())
+            target_array = np.asarray([float(str) for str in self.target_vrp_field.get()[1:-1].split(',')])
+            current_array = np.asarray([float(str) for str in self.current_vrp_field.get()[1:-1].split(',')])
+            fly_array = target_array - current_array
+            print("target: ", target_array, " current: ", current_array, " fly: ", fly_array, " steps: ", steps)
+
+        except:
+            print("INVALID PARAMETERS")
+            return
+        # divide 1 by step count to get the amount it should translate each time 
+        t_step = 1.0 / steps
+        fly_array *= t_step
+
+        # for each step
+        for i in range(steps):
+            
+            self.current_vrp +=  fly_array
+            self.vrp += fly_array
+            self.draw_objects(flying=True)
+            self.canvas.update()
+            print("fly step: ", i, " current vrp: ", self.current_vrp )
+        
+        new_vrp = self.target_vrp_field.get()
+        print("new_vrp: ", new_vrp)
+        self.target_vrp_field.delete(0, 'end')
+        self.target_vrp_field.insert(tk.END, self.current_vrp_field.get())
+        self.current_vrp_field.delete(0, 'end')
+        self.current_vrp_field.insert(tk.END, new_vrp)
+        
+
+
+
     left_bound = 0
     right_bound = 0
     upper_bound = 0
@@ -556,7 +610,7 @@ class cl_world:
         dap = self.perp(da)
         print("dap: ", dap)
         denom = np.dot( dap, db)
-        if denom == 0: return a1 if a_outside else a2
+        if np.isclose(denom, 0.0): return a1 if a_outside else a2
         print("denom: ", denom)
         num = np.dot( dap, dp )
         print("num: ", num)
@@ -568,10 +622,10 @@ class cl_world:
 
     def clip_line(self, t_line):
         # get both points A and B
-        print("t_line: ", t_line)
+        # print("t_line: ", t_line)
         a = np.copy(self.vertices[t_line[0]])
         b = np.copy(self.vertices[t_line[1]])
-        print("clipping line A: ", a, " to B: ", b)
+        # print("clipping line A: ", a, " to B: ", b)
         # get codes for a and B
         # -1 = below bound, 0 = within bounds, 1 = above bound
         # if abs(code_a[X] + code_b[X]) == 2 then it is not crossing the view
@@ -582,26 +636,25 @@ class cl_world:
         if a[X] < self.min[X]: code_a[X] = -1
         else: code_a[X] = 1 if a[X] > self.max[X] else 0
         if b[X] < self.min[X]: code_b[X] = -1
-        else: code_b[X] = 1 if a[X] > self.max[X] else 0
+        else: code_b[X] = 1 if b[X] > self.max[X] else 0
         within_x = np.abs(code_a[X] + code_b[X]) != 2
 
         # now the y axis
         if a[Y] < self.min[Y]: code_a[Y] = -1
         else: code_a[Y] = 1 if a[Y] > self.max[Y] else 0
         if b[Y] < self.min[Y]: code_b[Y] = -1
-        else: code_b[Y] = 1 if a[Y] > self.max[Y] else 0
+        else: code_b[Y] = 1 if b[Y] > self.max[Y] else 0
         within_y = np.abs(code_a[Y] + code_b[Y]) != 2
 
         # now the z axis
-        # if a[Z] < self.min[Z]: code_a[Z] = -1
-        # else: code_a[Z] = 1 if a[Z] > self.max[Z] else 0
-        # if b[Z] < self.min[Z]: code_b[Z] = -1
-        # else: code_b[Z] = 1 if a[Z] > self.max[Z] else 0
-        # within_z = np.abs(code_a[Z] + code_b[Z]) != 2
-        within_z = True
+        if a[Z] < self.min[Z]: code_a[Z] = -1
+        else: code_a[Z] = 1 if a[Z] > self.max[Z] else 0
+        if b[Z] < self.min[Z]: code_b[Z] = -1
+        else: code_b[Z] = 1 if b[Z] > self.max[Z] else 0
+        within_z = np.abs(code_a[Z] + code_b[Z]) != 2
 
-        print("code a: ", code_a, " code b: ", code_b)
-        print("within x: ", within_x, " within y: ", within_y, " within z: ", within_z)
+        # print("code a: ", code_a, " code b: ", code_b)
+        # print("within x: ", within_x, " within y: ", within_y, " within z: ", within_z)
 
         # if the line is totally out of bounds on one of the axis, return false to cull the line
         if (not within_x or not within_y or not within_z): return [False, [a, b]]
@@ -624,41 +677,91 @@ class cl_world:
         # if A is off the right side and B is not
         if code_a[X] == 1 and code_b[X] != 1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.max[Y]]), np.array([self.max[X], self.min[Y]]), True)
+            t_point = self.get_intersect(b[:-1], a[:-1], np.array([self.max[X], self.min[Y]]), np.array([self.max[X], self.max[Y]]), True)
             a[X] = t_point[X]
             a[Y] = t_point[Y]
         # if B is off the right side and A is not
         elif code_b[X] == 1 and code_a[X] != 1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.max[Y]]), np.array([self.max[X], self.min[Y]]), False)
+            t_point = self.get_intersect(b[:-1], a[:-1], np.array([self.max[X], self.min[Y]]), np.array([self.max[X], self.max[Y]]), False)
             b[X] = t_point[X]
             b[Y] = t_point[Y]
         
         # if A is off the top side and B is not
         if code_a[Y] == -1 and code_b[Y] != -1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.min[Y], self.max[X]]), np.array([self.min[Y], self.min[X]]), True)
+            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.min[Y]]), np.array([self.min[X], self.min[Y]]), True)
             a[X] = t_point[X]
             a[Y] = t_point[Y]
         # if B is off the top side and A is not
         elif code_b[Y] == -1 and code_a[Y] != -1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.min[Y], self.max[X]]), np.array([self.min[Y], self.min[X]]), False)
+            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.min[Y]]), np.array([self.min[X], self.min[Y]]), False)
             b[X] = t_point[X]
             b[Y] = t_point[Y]
         # if A is off the bottom side and B is not
         if code_a[Y] == 1 and code_b[Y] != 1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[Y], self.max[X]]), np.array([self.max[Y], self.min[X]]), True)
+            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.max[Y]]), np.array([self.min[X], self.max[Y]]), True)
             a[X] = t_point[X]
             a[Y] = t_point[Y]
         # if B is off the bottom side and A is not
         elif code_b[Y] == 1 and code_a[Y] != 1:
             # then replace a with the intersection point of ab and the left boundry
-            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[Y], self.max[X]]), np.array([self.max[Y], self.min[X]]), False)
+            t_point = self.get_intersect(a[:-1], b[:-1], np.array([self.max[X], self.max[Y]]), np.array([self.min[X], self.max[Y]]), False)
             b[X] = t_point[X]
             b[Y] = t_point[Y]
-        print("clipped points: ", [a, b])
+        
+        # if a is off the front against the y axis
+        if code_a[Z] == -1 and code_b[Z] != -1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[Y], self.min[Z]]), np.array([self.max[Y], self.min[Z]]), True)
+            a[Z] = t_point[Z - 1]
+            a[Y] = t_point[Y - 1]
+        # if a is off the back
+        if code_a[Z] == 1 and code_b[Z] != 1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[Y], self.max[Z]]), np.array([self.max[Y], self.max[Z]]), True)
+            a[Z] = t_point[Z - 1]
+            a[Y] = t_point[Y - 1]
+        if code_b[Z] == -1 and code_a[Z] != -1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[Y], self.min[Z]]), np.array([self.max[Y], self.min[Z]]), True)
+            b[Z] = t_point[Z - 1]
+            b[Y] = t_point[Y - 1]
+        if code_b[Z] == 1 and code_a[Z] != 1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[Y], self.max[Z]]), np.array([self.max[Y], self.max[Z]]), True)
+            b[Z] = t_point[Z - 1]
+            b[Y] = t_point[Y - 1]
+        
+         # if a is off the front against the x axis
+        if code_a[Z] == -1 and code_b[Z] != -1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[X], self.min[Z]]), np.array([self.max[X], self.min[Z]]), True)
+            a[Z] = t_point[Z - 1]
+            a[X] = t_point[X]
+        # if a is off the back against the x axis
+        if code_a[Z] == 1 and code_b[Z] != 1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[X], self.max[Z]]), np.array([self.max[X], self.max[Z]]), True)
+            a[Z] = t_point[Z - 1]
+            a[X] = t_point[X]
+        # if b is off the front against the x axis
+        if code_b[Z] == -1 and code_a[Z] != -1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[X], self.min[Z]]), np.array([self.max[X], self.min[Z]]), True)
+            b[Z] = t_point[Z - 1]
+            b[X] = t_point[X]
+        # if b is off the front against the x axis
+        if code_b[Z] == 1 and code_a[Z] != 1:
+            # then replace a with the intersection point of ab and the left boundry
+            t_point = self.get_intersect(a[1:], b[1:], np.array([self.min[X], self.max[Z]]), np.array([self.max[X], self.max[Z]]), True)
+            b[Z] = t_point[Z - 1]
+            b[X] = t_point[X]
+
+        
+        # print("clipped points: ", [a, b])
         return [True, [a, b]]
 
        
@@ -842,7 +945,7 @@ class cl_world:
         for i in range(1, steps + 1):
             # get the step theta
             theta = deg_step * i
-            print("i = ", i, " theta = ", np.rad2deg(theta))
+            # print("i = ", i, " theta = ", np.rad2deg(theta))
             # for each vertex (except the first one)
             for j in range(1, v_count):
                 # get the vert

@@ -1,7 +1,7 @@
 # Moses, Tristan
-# 1001_123_456
-# 2024_10_14
-# Assignment_02_01
+# 1001_816_879
+# 2024_20_14
+# Assignment_03_04
 import copy as copy
 import numpy as np
 import tkinter as tk
@@ -330,12 +330,12 @@ class cl_world:
         # draw a rectangle to represent the viewport
         self.canvas.coords(self.objects[0], int(self.left_bound), int(self.upper_bound), int(self.right_bound), int(self.lower_bound))
         
-        print("projected_vertices: ", self.vertices)
-        print("initial_vertices before projection: ", self.initial_vertices)
+        # print("projected_vertices: ", self.vertices)
+        # print("initial_vertices before projection: ", self.initial_vertices)
         self.vertices = copy.deepcopy(self.initial_vertices)
         for i in range(1, len(self.vertices)):
             t_vert = self.vertices[i]
-            print("initial vert: ", i, " = ", t_vert)
+            # print("initial vert: ", i, " = ", t_vert)
             # step 1 translate
             t_vert += self.vrp_trans
             
@@ -360,8 +360,8 @@ class cl_world:
             # print("(final) scale vert: ", i, " = ", t_vert)
             # apply the transformations
             self.vertices[i] = t_vert
-        print("initial verticies after projection: ", self.initial_vertices)
-        print(" same as regular? : ", self.initial_vertices[1] == self.vertices[1])
+        # print("initial verticies after projection: ", self.initial_vertices)
+        # print(" same as regular? : ", self.initial_vertices[1] == self.vertices[1])
 
         # draw each face
         n = len(self.objects)
@@ -519,15 +519,13 @@ class cl_world:
         # print("After Parallel Projection: vrp: ", self.vrp, " vpn: ", self.vpn, " vup: ", self.vup, " prp: ", self.prp, " volume min: ", self.min, " volume max: ", self.max , " viewport: ", self.viewport)
         # origin = [self.vrp[X] * x_increment + left_bound, self.vrp[Y] * y_increment + upper_bound]
         # keep the original vertices
-        print("self.vertices cunt: ", self.vertices)
         self.initial_vertices = copy.deepcopy(self.vertices)
         # now do all that to every vert
         for i in range(1, len(self.vertices)):
             t_vert = self.vertices[i]
-            print("initial vert: ", i, " = ", t_vert)
+            # print("initial vert: ", i, " = ", t_vert)
             # step 1 translate
             t_vert += self.vrp_trans
-            print("HOE vertices: ", self.vertices[i], " initial_vertices: ", self.initial_vertices[i])
             # print("translate vert: ", i, " = ", t_vert)
             # step 2 rotate x
             t_vert = [t_vert[X], np.cos(self.theta_x) * t_vert[Y] - np.sin(self.theta_x) * t_vert[Z], np.sin(self.theta_x) * t_vert[Y] + np.cos(self.theta_x) * t_vert[Z]]
@@ -549,7 +547,7 @@ class cl_world:
             # print("(final) scale vert: ", i, " = ", t_vert)
             # apply the transformations
             self.vertices[i] = t_vert
-            print("vertices: ", self.vertices[i], " initial_vertices: ", self.initial_vertices[i])
+            # print("vertices: ", self.vertices[i], " initial_vertices: ", self.initial_vertices[i])
         
         # draw each face
         for t_face in self.faces:
@@ -590,7 +588,7 @@ class cl_world:
             target_array = np.asarray([float(str) for str in self.target_vrp_field.get()[1:-1].split(',')])
             current_array = np.asarray([float(str) for str in self.current_vrp_field.get()[1:-1].split(',')])
             fly_array = target_array - current_array
-            print("target: ", target_array, " current: ", current_array, " fly: ", fly_array, " steps: ", steps)
+            # print("target: ", target_array, " current: ", current_array, " fly: ", fly_array, " steps: ", steps)
 
         except:
             print("INVALID PARAMETERS")
@@ -606,10 +604,10 @@ class cl_world:
             self.vrp += fly_array
             self.draw_objects(flying=True)
             self.canvas.update()
-            print("fly step: ", i, " current vrp: ", self.current_vrp )
+            # print("fly step: ", i, " current vrp: ", self.current_vrp )
         
         new_vrp = self.target_vrp_field.get()
-        print("new_vrp: ", new_vrp)
+        # print("new_vrp: ", new_vrp)
         self.target_vrp_field.delete(0, 'end')
         self.target_vrp_field.insert(tk.END, self.current_vrp_field.get())
         self.current_vrp_field.delete(0, 'end')
@@ -633,7 +631,7 @@ class cl_world:
 
 
     def get_intersect(self, a1,a2, b1,b2, a_outside) :
-        print("A: ", a1, " B: ", a2, " C: ", b1, " D: ", b2)
+        # print("A: ", a1, " B: ", a2, " C: ", b1, " D: ", b2)
         a1 = np.array(a1)
         a2 = np.array(a2)
         b1 = np.array(b1)
@@ -641,15 +639,15 @@ class cl_world:
         da = a2-a1
         db = b2-b1
         dp = a1-b1
-        print("da: ", da, " db: ", db, " dp: ", dp)
+        # print("da: ", da, " db: ", db, " dp: ", dp)
         dap = self.perp(da)
-        print("dap: ", dap)
+        # print("dap: ", dap)
         denom = np.dot( dap, db)
         if np.isclose(denom, 0.0): return a1 if a_outside else a2
-        print("denom: ", denom)
+        # print("denom: ", denom)
         num = np.dot( dap, dp )
-        print("num: ", num)
-        print("intersection = ", (num / denom.astype(float))*db + b1)
+        # print("num: ", num)
+        # print("intersection = ", (num / denom.astype(float))*db + b1)
         return (num / denom.astype(float))*db + b1
         
 
@@ -837,7 +835,7 @@ class cl_world:
             steps = int(self.rot_steps_field.get())
             # get degrees
             deg = np.deg2rad(float(self.rot_deg_field.get()))
-            print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
+            # print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
         except:
             print("INVALID PARAMETERS")
             return
@@ -846,13 +844,13 @@ class cl_world:
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
         original_verts = self.initial_vertices.copy()
-        print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
-        print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
+        # print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
+        # print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
         # for each step
         for i in range(1, steps + 1):
             theta = deg_step * i
-            print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
+            # print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
             # for each vertex (except the first one)
             for j in range(1, v_count):
                 t_vert = original_verts[j].copy()
@@ -871,7 +869,7 @@ class cl_world:
             steps = int(self.rot_steps_field.get())
             # get degrees
             deg = np.deg2rad(float(self.rot_deg_field.get()))
-            print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
+            # print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
         except:
             print("INVALID PARAMETERS")
             return
@@ -880,13 +878,13 @@ class cl_world:
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
         original_verts = self.initial_vertices.copy()
-        print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
-        print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
+        # print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
+        # print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
         # for each step
         for i in range(1, steps + 1):
             theta = deg_step * i
-            print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
+            # print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
             # for each vertex (except the first one)
             for j in range(1, v_count):
                 t_vert = original_verts[j].copy()
@@ -905,7 +903,7 @@ class cl_world:
             steps = int(self.rot_steps_field.get())
             # get degrees
             deg = np.deg2rad(float(self.rot_deg_field.get()))
-            print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
+            # print("deg: ", float(self.rot_deg_field.get()), " rads: ", deg)
         except:
             print("INVALID PARAMETERS")
             return
@@ -914,13 +912,13 @@ class cl_world:
         deg_step = deg / steps
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
         original_verts = self.initial_vertices.copy()
-        print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
-        print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
+        # print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
+        # print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         
         # for each step
         for i in range(1, steps + 1):
             theta = deg_step * i
-            print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
+            # print("theta rads: ", theta, " theta degs: ", np.rad2deg(theta), " cos(theta): ", round(np.cos(theta), 8), " sin(theta): ", round(np.sin(theta), 8))
             # for each vertex (except the first one)
             for j in range(1, v_count):
                 t_vert = original_verts[j].copy()
@@ -955,26 +953,26 @@ class cl_world:
         # rotate b to allign with z axis
         
         # rotate around x axis to make y = 0
-        print("b before x rot: ", point_b)
+        # print("b before x rot: ", point_b)
         theta_x = np.arctan(point_b[Y] / point_b[Z])
-        print("theta x = arctan(z / y): ", theta_x, " cos theta x: ", np.cos(theta_x), " sin theta x: ", np.sin(theta_x))
+        # print("theta x = arctan(z / y): ", theta_x, " cos theta x: ", np.cos(theta_x), " sin theta x: ", np.sin(theta_x))
         point_b = [point_b[X], np.cos(theta_x) * point_b[Y] - np.sin(theta_x) * point_b[Z], np.sin(theta_x) * point_b[Y] + np.cos(theta_x) * point_b[Z],]
-        print("b after x rot: ", point_b)
+        # print("b after x rot: ", point_b)
 
         # rotate around y axis to make x = 0
-        print("b before y rot: ", point_b)
+        # print("b before y rot: ", point_b)
         theta_y = np.arctan(point_b[X] / point_b[Z])
-        print("theta y = arctan(z / x): ", theta_y, " cos theta y: ", np.cos(theta_y), " sin theta y: ", np.sin(theta_y))
+        # print("theta y = arctan(z / x): ", theta_y, " cos theta y: ", np.cos(theta_y), " sin theta y: ", np.sin(theta_y))
         point_b = [np.cos(theta_y) * point_b[X] - np.sin(theta_y) * point_b[Z], point_b[Y], np.sin(theta_y) * point_b[X] + np.cos(theta_y) * point_b[Z]]
-        print("b after y rot: ", point_b)
+        # print("b after y rot: ", point_b)
 
         # get vertex count
         v_count = len(self.initial_vertices)
         deg_step = deg / (steps)
         # I really didn't want to do this, but I could NOT get it to work without caching the original verts :(
         original_verts = self.initial_vertices.copy()
-        print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
-        print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
+        # print("deg step: ", float(self.rot_deg_field.get()) / steps, " rad step: ", deg_step)
+        # print("cos(deg_step): ", np.cos(deg_step), " sin(deg_step): ", np.sin(deg_step))
         # for each step
         for i in range(1, steps + 1):
             # get the step theta
